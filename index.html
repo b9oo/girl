@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MakeCode Arcade 3D Model Renderer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a2e;
+            color: #e2e2e2;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            text-align: center;
+            background: #16162a;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            border: 2px solid #4f46e5;
+            max-width: 90vw;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 1.5rem;
+            color: #818cf8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        canvas {
+            background-color: #0f0f1a;
+            border: 2px solid #312e81;
+            border-radius: 8px;
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            image-rendering: pixelated;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            background-color: #6366f1;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .info-panel {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #9ca3af;
+            background: #1e1e38;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: left;
+            max-width: 400px;
+            line-height: 1.4;
+        }
+
+        .info-title {
+            font-weight: bold;
+            color: #34d399;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>3D Model Animation Preview</h1>
+    <canvas id="arcadeCanvas" width="320" height="240"></canvas>
+    
+    <div class="controls">
+        <button id="btnWalk">Toggle Walking</button>
+        <button id="btnWave">Toggle Waving</button>
+        <button id="btnReset">Reset Camera</button>
+    </div>
+
+    <div class="info-panel">
+        <div class="info-title">Type Error Fix Summary:</div>
+        Properly strictly types <code>Point3D</code> instances rather than mapping coordinates directly to standard primitive arrays, ensuring properties like <code>x</code>, <code>y</code>, and <code>z</code> are safely accessible during projection computations.
+    </div>
+</div>
+
+<script>
+    // Explicit Point3D class structure to fix structural assignment errors
+    class Point3D {
+        constructor(x, y, z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
+
+    // Explicit Structure for a 3D Box (Cuboid) component
+    class CubeComponent {
+        constructor(name, minPt, maxPt, color, customPivot = null) {
+            this.name = name;
+            // Define local vertex vertices safely as explicitly initialized Point3D instances
+            this.vertices = [
+                new Point3D(minPt.x, minPt.y, minPt.z),
+                new Point3D(maxPt.x, minPt.y, minPt.z),
+                new Point3D(maxPt.x, maxPt.y, minPt.z),
+                new Point3D(minPt.x, maxPt.y, minPt.z),
+                new Point3D(minPt.x, minPt.y, maxPt.z),
+                new Point3D(maxPt.x, minPt.y, maxPt.z),
+                new Point3D(maxPt.x, maxPt.y, maxPt.z),
+                new Point3D(minPt.x, maxPt.y, maxPt.z)
+            ];
+            this.color = color;
+            this.pivot = customPivot ? customPivot : new Point3D((minPt.x + maxPt.x)/2, minPt.y, (minPt.z + maxPt.z)/2);
+            
+            // Explicit array mapping for the faces
+            this.faces = [
+                [0, 1, 2, 3], // Front
+                [1, 5, 6, 2], // Right
+                [5, 4, 7, 6], // Back
+                [4, 0, 3, 7], // Left
+                [3, 2, 6, 7], // Top
+                [4, 5, 1, 0]  // Bottom
+            ];
+        }
+    }
+
+    const canvas = document.getElementById('arcadeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Camera variables
+    let angleY = 0.5;
+    let angleX = -0.2;
+    let scale = 5;
+
+    // Animation States
+    let isWalking = true;
+    let isWaving = false;
+    let time = 0;
+
+    // Initialize components incorporating distinct gender mod geometric curves 
+    const modelComponents = [
+        new CubeComponent("Head", new Point3D(-4, -12, -4), new Point3D(4, -4, 4), "#ffdbb5"),
+        new CubeComponent("Hair", new Point3D(-4.5, -12.5, 2), new Point3D(4.5, 6, 4.5), "#4a3728"), // Back hair layer
+        new CubeComponent("Torso", new Point3D(-4, -4, -2), new Point3D(4, 8, 2), "#3b82f6"),
+        
+        // Volumetric forward chest protrusion (Breasts structure matching the mod appearance)
+        new CubeComponent("ChestLayer", new Point3D(-3.5, -2, -3.5), new Point3D(3.5, 1, -2), "#3b82f6", new Point3D(0, -2, -2)),
+        
+        new CubeComponent("LeftArm", new Point3D(-7, -4, -1.5), new Point3D(-4, 8, 1.5), "#ec4899"),
+        new CubeComponent("RightArm", new Point3D(4, -4, -1.5), new Point3D(7, 8, 1.5), "#ec4899"),
+        new CubeComponent("LeftLeg", new Point3D(-3.5, 8, -2), new Point3D(-0.5, 20, 2), "#1f2937"),
+        new CubeComponent("RightLeg", new Point3D(0.5, 8, -2), new Point3D(3.5, 20, 2), "#1f2937")
+    ];
+
+    // Helper functions for rotating 3D coordinates safely
+    function rotateX(pt, angle) {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        return new Point3D(pt.x, pt.y * cos - pt.z * sin, pt.y * sin + pt.z * cos);
+    }
+
+    function rotateY(pt, angle) {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        return new Point3D(pt.x * cos + pt.z * sin, pt.y, -pt.x * sin + pt.z * cos);
+    }
+
+    // Main render pipeline loop
+    function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Background grid illusion
+        ctx.strokeStyle = '#1e1b4b';
+        ctx.lineWidth = 1;
+        for(let i = 0; i < canvas.width; i += 20) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+        }
+        for(let j = 0; j < canvas.height; j += 20) {
+            ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke();
+        }
+
+        time += 0.05;
+
+        // Dynamic polygon container for depth calculations sorting
+        let polygonsToRender = [];
+
+        modelComponents.forEach(comp => {
+            let rotXModifier = 0;
+            let rotZModifier = 0;
+            let translationYModifier = 0;
+
+            // Apply expressive stylized anime motion constants
+            if (isWalking) {
+                // Sinuous leg/arm extensions
+                if (comp.name === "LeftArm" || comp.name === "RightLeg") {
+                    rotXModifier = Math.sin(time) * 0.5;
+                } else if (comp.name === "RightArm" || comp.name === "LeftLeg") {
+                    rotXModifier = -Math.sin(time) * 0.5;
+                }
+                
+                // Add soft hip swaying vertical bounce translation to model parts
+                if (comp.name === "Torso" || comp.name === "ChestLayer" || comp.name === "Head" || comp.name === "Hair") {
+                    translationYModifier = Math.abs(Math.sin(time * 2)) * 0.6;
+                }
+                
+                // Exaggerated side-to-side torso swagger tracking rhythm
+                if (comp.name === "ChestLayer") {
+                    rotZModifier = Math.sin(time) * 0.08;
+                }
+            }
+
+            // Explicit primary anime style chest jiggle/bounce physics loop expansion
+            if (comp.name === "ChestLayer") {
+                // High-frequency secondary sinusoidal wave layered over the core movement to simulate structural lag/inertia bounce
+                const jiggleFactor = isWalking ? 1.0 : 0.25; // Continuous subtle ambient vibration when idle
+                rotXModifier += Math.sin(time * 3.5) * 0.12 * jiggleFactor;
+                translationYModifier += Math.cos(time * 3.5) * 0.3 * jiggleFactor;
+            }
+
+            if (isWaving && comp.name === "RightArm") {
+                rotXModifier = -Math.PI + 0.3;
+                rotZModifier = Math.sin(time * 2.5) * 0.4; // Exaggerated rapid wave pace
+            }
+
+            comp.faces.forEach((faceIndices, faceIdx) => {
+                let transformedVertices = [];
+                let avgZ = 0;
+
+                faceIndices.forEach(idx => {
+                    let v = comp.vertices[idx];
+                    
+                    // 1. Pivot Offset Transform (Local Component Joint Space)
+                    let lx = v.x - comp.pivot.x;
+                    let ly = v.y - comp.pivot.y;
+                    let lz = v.z - comp.pivot.z;
+                    let localPt = new Point3D(lx, ly, lz);
+
+                    // 2. Local Animation Rotations
+                    if(rotXModifier !== 0) localPt = rotateX(localPt, rotXModifier);
+                    if(rotZModifier !== 0) {
+                        const cosZ = Math.cos(rotZModifier);
+                        const sinZ = Math.sin(rotZModifier);
+                        localPt = new Point3D(localPt.x * cosZ - localPt.y * sinZ, localPt.x * sinZ + localPt.y * cosZ, localPt.z);
+                    }
+
+                    // Re-apply pivot offset position along with secondary bounce translations
+                    let finalPt = new Point3D(
+                        localPt.x + comp.pivot.x, 
+                        localPt.y + comp.pivot.y + translationYModifier, 
+                        localPt.z + comp.pivot.z
+                    );
+
+                    // 3. Global Camera World Rotation
+                    finalPt = rotateY(finalPt, angleY);
+                    finalPt = rotateX(finalPt, angleX);
+
+                    transformedVertices.push(finalPt);
+                    avgZ += finalPt.z;
+                });
+
+                avgZ /= faceIndices.length;
+
+                // Push poly structure to display list
+                polygonsToRender.push({
+                    vertices: transformedVertices,
+                    zDepth: avgZ,
+                    color: comp.color,
+                    faceIdx: faceIdx
+                });
+            });
+        });
+
+        // Simple Painters Algorithm Sort based on Z coordinates depth values
+        polygonsToRender.sort((a, b) => b.zDepth - a.zDepth);
+
+        // Render sorted faces on screen
+        polygonsToRender.forEach(poly => {
+            ctx.beginPath();
+            poly.vertices.forEach((v, i) => {
+                let projX = canvas.width / 2 + v.x * scale;
+                let projY = canvas.height / 2 + v.y * scale;
+                
+                if (i === 0) ctx.moveTo(projX, projY);
+                else ctx.lineTo(projX, projY);
+            });
+            ctx.closePath();
+
+            ctx.fillStyle = poly.color;
+            ctx.fill();
+            
+            ctx.strokeStyle = 'rgba(15, 15, 26, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        angleY += 0.005;
+
+        requestAnimationFrame(render);
+    }
+
+    // Event Hooks for configuration sliders
+    document.getElementById('btnWalk').addEventListener('click', () => {
+        isWalking = !isWalking;
+    });
+
+    document.getElementById('btnWave').addEventListener('click', () => {
+        isWaving = !isWaving;
+    });
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+        angleY = 0.5;
+        angleX = -0.2;
+    });
+
+    // Start App Loop execution
+    window.onload = function() {
+        render();
+    };
+</script>
+</body>
+</html>
