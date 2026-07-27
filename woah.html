@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Infinite Terrain Voxel Sandbox with Pause Menu System</title>
+    <!-- Three.js Whitelisted CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #74b9ff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        /* Header / Instructions */
+        #header-panel {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 12px;
+            max-width: 450px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #header-panel h1 {
+            margin: 0 0 8px 0;
+            font-size: 1.3rem;
+            color: #ff78ac;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        #header-panel p {
+            margin: 4px 0;
+            font-size: 0.85rem;
+            color: #e0e0e0;
+        }
+        /* Survival Status Panel */
+        #status-panel {
+            position: absolute;
+            top: 20px;
+            left: 490px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(5px);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            min-width: 180px;
+        }
+        .status-bar-container {
+            width: 100%;
+            background: #2f3542;
+            height: 14px;
+            border-radius: 7px;
+            overflow: hidden;
+            margin-top: 5px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        #bladder-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ffeaa7, #f1c40f);
+            transition: width 0.1s linear;
+        }
+        /* Hotbar Selector */
+        #hotbar-container {
+            align-self: center;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
+            padding: 8px;
+            border-radius: 16px;
+            display: flex;
+            gap: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            border: 2px solid #ff78ac;
+            margin-bottom: 10px;
+        }
+        .hotbar-slot {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            border: 3px solid transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .hotbar-slot.active {
+            border-color: #ff78ac;
+            background: rgba(255, 120, 172, 0.2);
+            transform: scale(1.1);
+            box-shadow: 0 0 12px #ff78ac;
+        }
+        .hotbar-slot:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .block-preview {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+        }
+        .slot-num {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            color: white;
+            font-size: 0.65rem;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 14px;
+            height: 14px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 5;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 2px rgba(0,0,0,0.8);
+        }
+        #crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
+        #crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+
+        /* Action Mode Toggle */
+        #mode-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            border-left: 4px solid #ff78ac;
+        }
+        .highlight-text {
+            color: #ff78ac;
+            font-weight: bold;
+        }
+
+        /* Mobile Controls Layout */
+        #mobile-controls {
+            display: none;
+            width: 100%;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 10px;
+        }
+        .joystick-zone {
+            width: 120px;
+            height: 120px;
+            background: rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .joystick-handle {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 120, 172, 0.7);
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .btn-round {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid #ff78ac;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .btn-round:active {
+            transform: scale(0.9);
+            background: rgba(255, 120, 172, 0.4);
+        }
+
+        /* --- PAUSE MENU MODAL STYLES --- */
+        #pause-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 15, 25, 0.65);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+            display: none; /* Controlled dynamically by game code */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 25px;
+        }
+        .pause-box {
+            background: rgba(0, 0, 0, 0.75);
+            border: 2px solid #ff78ac;
+            border-radius: 20px;
+            padding: 35px 50px;
+            min-width: 320px;
+            text-align: center;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 30px rgba(255, 120, 172, 0.15);
+        }
+        .pause-title {
+            margin: 0 0 25px 0;
+            color: #ff78ac;
+            font-size: 1.8rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255, 120, 172, 0.4);
+        }
+        .pause-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #2f3542, #57606f);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 12px 20px;
+            margin-bottom: 12px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .pause-btn:hover {
+            background: linear-gradient(135deg, #ff78ac, #ff4791);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 120, 172, 0.4);
+        }
+        .pause-btn:active {
+            transform: translateY(0);
+        }
+        .pause-btn.danger {
+            background: linear-gradient(135deg, #ee5253, #ff6b6b);
+        }
+        .pause-btn.danger:hover {
+            background: linear-gradient(135deg, #ff6b6b, #ff2222);
+            box-shadow: 0 6px 15px rgba(238, 82, 83, 0.4);
+        }
+        .pause-hint {
+            color: #a4b0be;
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 900px) {
+            #status-panel { left: 20px; top: 180px; }
+        }
+        @media (max-width: 768px) {
+            #mobile-controls { display: flex; }
+            #header-panel { max-width: 100%; font-size: 0.8rem; padding: 10px; }
+            #header-panel h1 { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+    <div id="crosshair"></div>
+
+    <div id="ui-layer">
+        <!-- Top Info Header -->
+        <div id="header-panel" class="interactive">
+            <h1>🌸 Anime Voxel Craft 🌸</h1>
+            <p><strong>Move:</strong> WASD keys / Arrow Keys</p>
+            <p><strong>Camera:</strong> Click & Drag to rotate view</p>
+            <p><strong>Actions:</strong> Left-Click to Break | Shift + Left-Click to Place</p>
+            <p><strong>Pause Menu:</strong> Press <span class="highlight-text">ESC</span> or click the top-right indicator button to toggle pause options anytime.</p>
+            <p><strong>Sponge Tool:</strong> Select slot [9]. Left-click fluid blocks to soak up and absorb fluid pool voxels instantly.</p>
+        </div>
+
+        <!-- Survival Status Panel -->
+        <div id="status-panel">
+            <div style="font-size: 0.85rem; font-weight: bold;">Bladder Level: <span id="bladder-text">0</span>%</div>
+            <div class="status-bar-container">
+                <div id="bladder-bar"></div>
+            </div>
+            <div id="wetting-indicator" style="font-size: 0.75rem; color: #f1c40f; margin-top: 4px; display: none; font-weight: bold; text-shadow: 1px 1px 1px black;">⚠️ INFINITE ACCUMULATION ACTIVE</div>
+        </div>
+
+        <div id="mode-indicator" class="interactive" style="cursor:pointer;" onclick="toggleGamePause(true)">
+            Current Action: <span id="current-action-text" class="highlight-text">BREAK MODE</span><br>
+            <span style="font-size:0.75rem; color:#ccc;">Press <strong>ESC</strong> to open Pause Menu</span>
+        </div>
+
+        <!-- Mobile Support Controls Layout -->
+        <div id="mobile-controls" class="interactive">
+            <div class="joystick-zone" id="mobile-joystick">
+                <div class="joystick-handle" id="joystick-handle"></div>
+            </div>
+            <div class="action-buttons">
+                <div class="btn-round" id="btn-bathroom" style="background:#f1c40f; border-color:#fff;">USE BKT</div>
+                <div class="btn-round" id="btn-mode">MODE</div>
+                <div class="btn-round" id="btn-jump">JUMP / SWIM</div>
+            </div>
+        </div>
+
+        <!-- Hotbar Elements Selector -->
+        <div id="hotbar-container" class="interactive">
+            <!-- Populated dynamically via JS -->
+        </div>
+    </div>
+
+    <!-- Pause Menu Frame Layer -->
+    <div id="pause-overlay">
+        <div class="pause-box">
+            <div class="pause-title">GAME PAUSED</div>
+            <button class="pause-btn" onclick="toggleGamePause(false)">RESUME SANDBOX</button>
+            <button class="pause-btn" onclick="triggerPauseMenuInfiniteWet()">FORCE WET MODE</button>
+            <button class="pause-btn danger" onclick="triggerPauseMenuClearFluids()">CLEAR ALL FLUIDS</button>
+            <div class="pause-hint">Press ESC again to return to game</div>
+        </div>
+    </div>
+
+    <script>
+        // --- GAME CONFIG & CONSTANTS ---
+        const BLOCK_SIZE = 1;
+        const CHUNK_SIZE = 8;       
+        const RENDER_DIST = 3;      
+        const GRAVITY = -18;
+        const JUMP_FORCE = 7.5;
+        let MOVE_SPEED = 5;
+
+        // Block Type Registrations
+        const BLOCK_TYPES = [
+            { id: 1, name: 'Grass', color: 0x55efc4, topColor: 0x2ecc71, sideColor: 0x78e08f },
+            { id: 2, name: 'Sakura Leaves', color: 0xff78ac, topColor: 0xff9ff3, sideColor: 0xf78fb3 },
+            { id: 3, name: 'Wood Log', color: 0x784c1e, topColor: 0x8a5a2b, sideColor: 0x613d16 },
+            { id: 4, name: 'Stone', color: 0xa4b0be, topColor: 0xdcdde1, sideColor: 0x718093 },
+            { id: 5, name: 'Anime Gold Block', color: 0xfbc531, topColor: 0xedf2f4, sideColor: 0xeccc68 },
+            { id: 6, name: 'Magic Glass', color: 0x74b9ff, topColor: 0x81ecec, sideColor: 0x74b9ff, transparent: true, opacity: 0.6 },
+            { id: 7, name: 'Iron Bucket', color: 0xdcdde1, topColor: 0x2f3542, sideColor: 0xa4b0be },
+            { id: 8, name: 'Fluid Pool', color: 0xf1c40f, topColor: 0xffeaa7, sideColor: 0xf1c40f, transparent: true, opacity: 0.6, liquid: true },
+            { id: 9, name: 'Sponge', color: 0xeccc68, topColor: 0xf5cd79, sideColor: 0xeccc68, sponge: true }
+        ];
+        let activeBlockIndex = 0;
+
+        // --- ENGINE STATE ---
+        let scene, camera, renderer, clock;
+        let isGamePausedState = false; // State manager flag for freeze locks
+        
+        let worldMap = new Map();       
+        let activeChunks = new Map();   
+        let blockMaterials = {};        
+        let blockGeometry;              
+        
+        let player = {
+            position: new THREE.Vector3(12, 8, 12),
+            velocity: new THREE.Vector3(0, 0, 0),
+            height: 1.8,
+            width: 0.6,
+            isGrounded: false,
+            rotationY: 0,
+            bladder: 85,              
+            isUsingBathroom: false,   
+            bathroomTimer: 0,
+            bathroomDuration: 0,      
+            startingBladder: 0,       
+            infiniteWetMode: false,   
+            isSwimming: false,
+            skirt: null,
+            spongeMesh: null,
+            lastChunkX: NaN,
+            lastChunkZ: NaN,
+            fluidAccumulationTimer: 0 
+        };
+
+        let fluidStreamMesh = null;
+        let placementBucketMesh = null;
+
+        // Inputs tracker
+        const keys = { w: false, a: false, s: false, d: false, Space: false, Shift: false };
+        let mouse = { x: 0, y: 0, isDown: false, lastX: 0, lastY: 0 };
+        let cameraOrbit = { theta: 0, phi: Math.PI / 4, radius: 4.5 }; 
+
+        // Physics/Jiggle rigging entities
+        let characterGroup; 
+        let physicsJoints = []; 
+
+        // --- INITIALIZATION ---
+        function init() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x74b9ff);
+            scene.fog = new THREE.FogExp2(0x74b9ff, 0.02);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            setupLighting();
+            setupSharedBlockAssets();
+            updateWorldStreaming(true); 
+            createAnimeCharacterModel();
+            buildHotbarUI();
+
+            window.addEventListener('resize', onWindowResize, false);
+            setupInputListeners();
+
+            animate();
+        }
+
+        function setupLighting() {
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.65);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 512; 
+            dirLight.shadow.mapSize.height = 512;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 100;
+            const d = 25;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            dirLight.shadow.bias = -0.001;
+            scene.add(dirLight);
+
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xff78ac, 0.25);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+        }
+
+        // --- BATCHED ASSET ALLOCATION ---
+        function setupSharedBlockAssets() {
+            blockGeometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            
+            BLOCK_TYPES.forEach(type => {
+                const sideMat = new THREE.MeshStandardMaterial({ color: type.sideColor, roughness: 0.8 });
+                const topMat = new THREE.MeshStandardMaterial({ color: type.topColor, roughness: 0.7 });
+                const bottomMat = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.9 });
+                
+                if (type.transparent) {
+                    sideMat.transparent = true; sideMat.opacity = type.opacity;
+                    topMat.transparent = true; topMat.opacity = type.opacity;
+                    bottomMat.transparent = true; bottomMat.opacity = type.opacity;
+                }
+                blockMaterials[type.id] = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
+            });
+        }
+
+        // --- INFINITE CHUNK MANAGEMENT PASSES ---
+        function updateWorldStreaming(forceUpdate = false) {
+            const currentChunkX = Math.floor(player.position.x / CHUNK_SIZE);
+            const currentChunkZ = Math.floor(player.position.z / CHUNK_SIZE);
+
+            if (!forceUpdate && player.lastChunkX === currentChunkX && player.lastChunkZ === currentChunkZ) return;
+
+            player.lastChunkX = currentChunkX;
+            player.lastChunkZ = currentChunkZ;
+
+            const chunksToKeep = new Set();
+
+            for (let xOffset = -RENDER_DIST; xOffset <= RENDER_DIST; xOffset++) {
+                for (let zOffset = -RENDER_DIST; zOffset <= RENDER_DIST; zOffset++) {
+                    if (xOffset*xOffset + zOffset*zOffset > RENDER_DIST*RENDER_DIST) continue;
+
+                    const cx = currentChunkX + xOffset;
+                    const cz = currentChunkZ + zOffset;
+                    const chunkKey = `${cx},${cz}`;
+                    chunksToKeep.add(chunkKey);
+
+                    if (!activeChunks.has(chunkKey)) {
+                        generateChunkGeometry(cx, cz);
+                    }
+                }
+            }
+
+            for (const [key, chunkGroup] of activeChunks.entries()) {
+                if (!chunksToKeep.has(key)) {
+                    scene.remove(chunkGroup);
+                    chunkGroup.children.forEach(mesh => {
+                        if (mesh.dispose) mesh.dispose();
+                    });
+                    activeChunks.delete(key);
+                }
+            }
+        }
+
+        function generateChunkGeometry(cx, cz) {
+            const chunkGroup = new THREE.Group();
+            chunkGroup.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
+
+            const typeAllocationMaps = {};
+            BLOCK_TYPES.forEach(t => typeAllocationMaps[t.id] = []);
+
+            for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+                for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                    const gx = cx * CHUNK_SIZE + lx;
+                    const gz = cz * CHUNK_SIZE + lz;
+                    const globalKey = `${gx},${gz}`;
+
+                    if (!worldMap.has(globalKey)) {
+                        let heightVal = Math.sin(gx * 0.12) * Math.cos(gz * 0.12) * 2.8;
+                        heightVal += Math.cos(gx * 0.06 + gz * 0.09) * 1.6;
+                        let targetHeight = Math.floor(heightVal + 4);
+                        if (targetHeight < 1) targetHeight = 1;
+
+                        const columnBlocks = [];
+                        for (let y = 0; y <= targetHeight; y++) {
+                            let typeId = 4; 
+                            if (y === targetHeight) {
+                                typeId = 1; 
+                            } else if (y > targetHeight - 3) {
+                                typeId = 2; 
+                            }
+                            columnBlocks.push({ y, typeId });
+                        }
+                        worldMap.set(globalKey, columnBlocks);
+                    }
+
+                    const blocksInColumn = worldMap.get(globalKey);
+                    blocksInColumn.forEach(b => {
+                        typeAllocationMaps[b.typeId].push({ lx, y: b.y, lz });
+                    });
+                }
+            }
+
+            BLOCK_TYPES.forEach(type => {
+                const coordinatesList = typeAllocationMaps[type.id];
+                if (coordinatesList.length === 0) return;
+
+                const chunkInstanceMesh = new THREE.InstancedMesh(
+                    blockGeometry, 
+                    blockMaterials[type.id], 
+                    coordinatesList.length
+                );
+                chunkInstanceMesh.castShadow = true;
+                chunkInstanceMesh.receiveShadow = true;
+
+                const matrix = new THREE.Matrix4();
+                coordinatesList.forEach((coord, index) => {
+                    matrix.makeTranslation(coord.lx + 0.5, coord.y + 0.5, coord.lz + 0.5);
+                    chunkInstanceMesh.setMatrixAt(index, matrix);
+                });
+
+                chunkInstanceMesh.instanceMatrix.needsUpdate = true;
+                chunkGroup.add(chunkInstanceMesh);
+            });
+
+            scene.add(chunkGroup);
+            activeChunks.set(`${cx},${cz}`, chunkGroup);
+        }
+
+        // --- INTERACTIVE MAP DEFORMATION INTERFACES ---
+        function setBlockAtGlobalCoordinates(gx, gy, gz, typeId) {
+            const cx = Math.floor(gx / CHUNK_SIZE);
+            const cz = Math.floor(gz / CHUNK_SIZE);
+            const globalKey = `${gx},${gz}`;
+
+            if (!worldMap.has(globalKey)) worldMap.set(globalKey, []);
+            let columnsList = worldMap.get(globalKey);
+
+            columnsList = columnsList.filter(b => b.y !== gy);
+
+            if (typeId !== null) {
+                columnsList.push({ y: gy, typeId });
+            }
+            worldMap.set(globalKey, columnsList);
+
+            const targetChunkKey = `${cx},${cz}`;
+            if (activeChunks.has(targetChunkKey)) {
+                const oldGroup = activeChunks.get(targetChunkKey);
+                scene.remove(oldGroup);
+                oldGroup.children.forEach(m => { if (m.dispose) m.dispose(); });
+                generateChunkGeometry(cx, cz);
+            }
+        }
+
+        function getBlockTypeAtGlobalCoordinates(gx, gy, gz) {
+            const globalKey = `${gx},${gz}`;
+            if (!worldMap.has(globalKey)) return 0;
+            const match = worldMap.get(globalKey).find(b => b.y === gy);
+            return match ? match.typeId : 0;
+        }
+
+        function createAnimeCharacterModel() {
+            characterGroup = new THREE.Group();
+
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffebd6, roughness: 0.6 });
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0xff6b81, roughness: 0.5 }); 
+            const outfitMat = new THREE.MeshStandardMaterial({ color: 0xff3838, roughness: 0.5 }); 
+            const accentMat = new THREE.MeshStandardMaterial({ color: 0xff78ac, roughness: 0.4 }); 
+            const eyeMat = new THREE.MeshStandardMaterial({ color: 0x74b9ff, roughness: 0.3 }); 
+            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
+            const spongeMat = new THREE.MeshStandardMaterial({ color: 0xf5cd79, roughness: 0.9 }); 
+
+            // Torso (Shirt)
+            const torsoGeo = new THREE.BoxGeometry(0.35, 0.55, 0.22);
+            const torsoMesh = new THREE.Mesh(torsoGeo, outfitMat);
+            torsoMesh.position.y = 0.275;
+            torsoMesh.castShadow = true;
+            characterGroup.add(torsoMesh);
+
+            // Left/Right Breasts
+            const breastGroupL = new THREE.Group();
+            breastGroupL.position.set(0.08, 0.42, 0.1);
+            const breastMeshL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), outfitMat);
+            breastMeshL.position.set(0, 0, 0.04); 
+            breastGroupL.add(breastMeshL);
+            characterGroup.add(breastGroupL);
+
+            const breastGroupR = new THREE.Group();
+            breastGroupR.position.set(-0.08, 0.42, 0.1);
+            const breastMeshR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), outfitMat);
+            breastMeshR.position.set(0, 0, 0.04); 
+            breastGroupR.add(breastMeshR);
+            characterGroup.add(breastGroupR);
+
+            registerPhysicsJoint(breastGroupL, { restRotation: new THREE.Vector3(0,0,0), stiffness: 0.08, damping: 0.78, maxAngle: 0.6, type: 'breast', side: 1 });
+            registerPhysicsJoint(breastGroupR, { restRotation: new THREE.Vector3(0,0,0), stiffness: 0.08, damping: 0.78, maxAngle: 0.6, type: 'breast', side: -1 });
+
+            // Skirt Base Group
+            const skirtGroup = new THREE.Group();
+            skirtGroup.position.set(0, 0.05, 0);
+            const skirtGeo = new THREE.BoxGeometry(0.4, 0.22, 0.28);
+            const skirtMesh = new THREE.Mesh(skirtGeo, accentMat);
+            skirtMesh.position.y = -0.11;
+            skirtMesh.castShadow = true;
+            skirtGroup.add(skirtMesh);
+            characterGroup.add(skirtGroup);
+            player.skirt = skirtGroup; 
+
+            registerPhysicsJoint(skirtGroup, { restRotation: new THREE.Vector3(0,0,0), stiffness: 0.08, damping: 0.82, maxAngle: 0.3, type: 'skirt' });
+
+            // Under-skirt White Mesh panel box layout
+            const underSkirtGeo = new THREE.BoxGeometry(0.28, 0.14, 0.20);
+            const underSkirtMesh = new THREE.Mesh(underSkirtGeo, whiteMat);
+            underSkirtMesh.position.set(0, -0.04, 0);
+            underSkirtMesh.castShadow = true;
+            characterGroup.add(underSkirtMesh);
+
+            // Head setup
+            const headGeo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+            const headMesh = new THREE.Mesh(headGeo, skinMat);
+            headMesh.position.y = 0.71;
+            headMesh.castShadow = true;
+            characterGroup.add(headMesh);
+
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.01), eyeMat);
+            eyeL.position.set(0.08, 0.72, 0.161);
+            const eyeR = eyeL.clone();
+            eyeR.position.x = -0.08;
+            characterGroup.add(eyeL);
+            characterGroup.add(eyeR);
+
+            const hairCapGeo = new THREE.BoxGeometry(0.36, 0.2, 0.36);
+            const hairCap = new THREE.Mesh(hairCapGeo, hairMat);
+            hairCap.position.set(0, 0.8, 0.02);
+            characterGroup.add(hairCap);
+
+            const bangsGeo = new THREE.BoxGeometry(0.36, 0.15, 0.06);
+            const bangs = new THREE.Mesh(bangsGeo, hairMat);
+            bangs.position.set(0, 0.76, 0.16);
+            characterGroup.add(bangs);
+
+            // --- TWIN TAILS ---
+            const twintailL1 = new THREE.Group();
+            twintailL1.position.set(0.2, 0.8, -0.05);
+            const tailMeshL1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), hairMat);
+            tailMeshL1.position.y = -0.15;
+            twintailL1.add(tailMeshL1);
+            characterGroup.add(twintailL1);
+
+            const twintailL2 = new THREE.Group();
+            twintailL2.position.set(0, -0.3, 0);
+            const tailMeshL2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.06), hairMat);
+            tailMeshL2.position.y = -0.15;
+            twintailL2.add(tailMeshL2);
+            twintailL1.add(twintailL2);
+
+            const twintailR1 = new THREE.Group();
+            twintailR1.position.set(-0.2, 0.8, -0.05);
+            const tailMeshR1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.08), hairMat);
+            tailMeshR1.position.y = -0.15;
+            twintailR1.add(tailMeshR1);
+            characterGroup.add(twintailR1);
+
+            const twintailR2 = new THREE.Group();
+            twintailR2.position.set(0, -0.3, 0);
+            const tailMeshR2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.06), hairMat);
+            tailMeshR2.position.y = -0.15;
+            twintailR2.add(tailMeshR2);
+            twintailR1.add(twintailR2);
+
+            registerPhysicsJoint(twintailL1, { restRotation: new THREE.Vector3(0,0,0.1), stiffness: 0.12, damping: 0.85, maxAngle: 0.8, type: 'hair' });
+            registerPhysicsJoint(twintailL2, { restRotation: new THREE.Vector3(0,0,0.05), stiffness: 0.1, damping: 0.88, maxAngle: 1.0, type: 'hair' });
+            registerPhysicsJoint(twintailR1, { restRotation: new THREE.Vector3(0,0,-0.1), stiffness: 0.12, damping: 0.85, maxAngle: 0.8, type: 'hair' });
+            registerPhysicsJoint(twintailR2, { restRotation: new THREE.Vector3(0,0,-0.05), stiffness: 0.1, damping: 0.88, maxAngle: 1.0, type: 'hair' });
+
+            const armGeo = new THREE.BoxGeometry(0.08, 0.45, 0.08);
+            player.leftArm = new THREE.Mesh(armGeo, skinMat);
+            player.leftArm.position.set(0.22, 0.35, 0);
+            player.rightArm = new THREE.Mesh(armGeo, skinMat);
+            player.rightArm.position.set(-0.22, 0.35, 0);
+            characterGroup.add(player.leftArm);
+            characterGroup.add(player.rightArm);
+
+            const spongeToolGeo = new THREE.BoxGeometry(0.18, 0.14, 0.22);
+            player.spongeMesh = new THREE.Mesh(spongeToolGeo, spongeMat);
+            player.spongeMesh.position.set(0, -0.25, 0.05); 
+            player.spongeMesh.visible = false; 
+            player.rightArm.add(player.spongeMesh);
+
+            const legGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+            player.leftLeg = new THREE.Mesh(legGeo, skinMat);
+            player.leftLeg.position.set(0.1, -0.25, 0);
+            player.rightLeg = new THREE.Mesh(legGeo, skinMat);
+            player.rightLeg.position.set(-0.1, -0.25, 0);
+            characterGroup.add(player.leftLeg);
+            characterGroup.add(player.rightLeg);
+
+            const sockGeo = new THREE.BoxGeometry(0.11, 0.25, 0.11);
+            const sockL = new THREE.Mesh(sockGeo, outfitMat); sockL.position.y = -0.12; player.leftLeg.add(sockL);
+            const sockR = new THREE.Mesh(sockGeo, outfitMat); sockR.position.y = -0.12; player.rightLeg.add(sockR);
+
+            scene.add(characterGroup);
+            characterGroup.position.copy(player.position);
+        }
+
+        function registerPhysicsJoint(threeObject, config) {
+            physicsJoints.push({
+                obj: threeObject,
+                stiffness: config.stiffness,
+                damping: config.damping,
+                maxAngle: config.maxAngle,
+                rest: config.restRotation.clone(),
+                currentRot: config.restRotation.clone(),
+                vel: new THREE.Vector3(0, 0, 0),
+                type: config.type,
+                side: config.side || 1,
+                restPos: threeObject.position.clone(),
+                currentPos: threeObject.position.clone(),
+                velPos: new THREE.Vector3(0,0,0)
+            });
+        }
+
+        function buildHotbarUI() {
+            const container = document.getElementById('hotbar-container');
+            container.innerHTML = '';
+            
+            BLOCK_TYPES.forEach((type, idx) => {
+                const slot = document.createElement('div');
+                slot.className = `hotbar-slot ${idx === activeBlockIndex ? 'active' : ''}`;
+                
+                const preview = document.createElement('div');
+                preview.className = 'block-preview';
+                preview.style.backgroundColor = '#' + type.topColor.toString(16);
+                
+                const numKey = document.createElement('div');
+                numKey.className = 'slot-num';
+                numKey.innerText = idx + 1;
+
+                slot.appendChild(preview);
+                slot.appendChild(numKey);
+                slot.addEventListener('click', () => {
+                    if (isGamePausedState) return;
+                    setActiveSlot(idx);
+                });
+                container.appendChild(slot);
+            });
+        }
+
+        function setActiveSlot(idx) {
+            activeBlockIndex = idx;
+            const slots = document.querySelectorAll('.hotbar-slot');
+            slots.forEach((s, sIdx) => {
+                if (sIdx === idx) s.classList.add('active');
+                else s.classList.remove('active');
+            });
+
+            if (player.spongeMesh) {
+                player.spongeMesh.visible = (BLOCK_TYPES[idx].id === 9);
+            }
+        }
+
+        // --- BUCKET INTERACTION INTERFACES ---
+        function executeBathroomMechanic() {
+            if (player.isUsingBathroom || isGamePausedState) return; 
+
+            if (player.bladder < 1 && !player.infiniteWetMode) return;
+
+            setActiveSlot(6); 
+
+            player.isUsingBathroom = true;
+            
+            player.startingBladder = player.bladder;
+            player.bathroomDuration = Math.max(1.0, (player.startingBladder / 100) * 5.0); 
+            player.bathroomTimer = player.bathroomDuration;
+
+            player.velocity.set(0, 0, 0); 
+
+            if (placementBucketMesh) scene.remove(placementBucketMesh);
+
+            placementBucketMesh = new THREE.Group();
+            placementBucketMesh.fluidLevel = 0.01; 
+            
+            const bucketMat = new THREE.MeshStandardMaterial({ color: 0xa4b0be, roughness: 0.3 });
+            const thickness = 0.04;
+            const w = 0.5;
+            const h = 0.4;
+            const d = 0.5;
+
+            const bottomGeo = new THREE.BoxGeometry(w, thickness, d);
+            const bottomMesh = new THREE.Mesh(bottomGeo, bucketMat);
+            bottomMesh.position.y = -h/2 + thickness/2;
+            bottomMesh.castShadow = true;
+            bottomMesh.receiveShadow = true;
+            placementBucketMesh.add(bottomMesh);
+
+            const wallLGeo = new THREE.BoxGeometry(thickness, h - thickness, d);
+            const wallL = new THREE.Mesh(wallLGeo, bucketMat);
+            wallL.position.set(-w/2 + thickness/2, thickness/2, 0);
+            wallL.castShadow = true;
+            wallL.receiveShadow = true;
+            placementBucketMesh.add(wallL);
+
+            const wallRGeo = new THREE.BoxGeometry(thickness, h - thickness, d);
+            const wallR = new THREE.Mesh(wallRGeo, bucketMat);
+            wallR.position.set(w/2 - thickness/2, thickness/2, 0);
+            wallR.castShadow = true;
+            wallR.receiveShadow = true;
+            placementBucketMesh.add(wallR);
+
+            const wallFGeo = new THREE.BoxGeometry(w - thickness * 2, h - thickness, thickness);
+            const wallF = new THREE.Mesh(wallFGeo, bucketMat);
+            wallF.position.set(0, thickness/2, d/2 - thickness/2);
+            wallF.castShadow = true;
+            wallF.receiveShadow = true;
+            placementBucketMesh.add(wallF);
+
+            const wallBGeo = new THREE.BoxGeometry(w - thickness * 2, h - thickness, thickness);
+            const wallB = new THREE.Mesh(wallBGeo, bucketMat);
+            wallB.position.set(0, thickness/2, -d/2 + thickness/2);
+            wallB.castShadow = true;
+            wallB.receiveShadow = true;
+            placementBucketMesh.add(wallB);
+
+            const fluidGeo = new THREE.BoxGeometry(w - thickness * 2, 1, d - thickness * 2); 
+            const fluidMat = new THREE.MeshStandardMaterial({ 
+                color: 0xf1c40f, 
+                roughness: 0.2, 
+                transparent: true, 
+                opacity: 0.8 
+            });
+            const fluidSurface = new THREE.Mesh(fluidGeo, fluidMat);
+            fluidSurface.name = "fluidSurface";
+            fluidSurface.scale.set(1, placementBucketMesh.fluidLevel, 1);
+            fluidSurface.position.set(0, -h/2 + thickness + placementBucketMesh.fluidLevel / 2, 0);
+            placementBucketMesh.add(fluidSurface);
+            
+            const spawnPos = player.position.clone();
+            spawnPos.y -= 0.7; 
+            spawnPos.x += Math.sin(player.rotationY) * 0.45;
+            spawnPos.z += Math.cos(player.rotationY) * 0.45;
+            placementBucketMesh.position.copy(spawnPos);
+            scene.add(placementBucketMesh);
+
+            createFluidStreamMesh();
+        }
+
+        // --- SOLID LIQUID STREAM MESH GENERATION ---
+        function createFluidStreamMesh() {
+            if (fluidStreamMesh) {
+                scene.remove(fluidStreamMesh);
+                fluidStreamMesh.geometry.dispose();
+                fluidStreamMesh.material.dispose();
+                fluidStreamMesh = null;
+            }
+
+            const streamGeo = new THREE.CylinderGeometry(0.02, 0.035, 1.0, 8, 1);
+            const streamMat = new THREE.MeshStandardMaterial({
+                color: 0xf1c40f,
+                roughness: 0.15,
+                transparent: true,
+                opacity: 0.85
+            });
+
+            fluidStreamMesh = new THREE.Mesh(streamGeo, streamMat);
+            fluidStreamMesh.castShadow = true;
+            scene.add(fluidStreamMesh);
+        }
+
+        function updateFluidStreamMeshLogic() {
+            if (!fluidStreamMesh) return;
+
+            const sourcePos = player.position.clone();
+            sourcePos.y -= 0.11; 
+
+            const clearanceDistance = 0.12;
+            sourcePos.x += Math.sin(player.rotationY) * clearanceDistance;
+            sourcePos.z += Math.cos(player.rotationY) * clearanceDistance;
+
+            let targetPos = new THREE.Vector3();
+            if (player.isUsingBathroom && placementBucketMesh) {
+                targetPos.copy(placementBucketMesh.position);
+                targetPos.y += 0.05; 
+            } else {
+                targetPos.copy(sourcePos).add(new THREE.Vector3(Math.sin(player.rotationY) * 0.4, -1.2, Math.cos(player.rotationY) * 0.4));
+            }
+
+            const distance = sourcePos.distanceTo(targetPos);
+            if (distance < 0.05) {
+                fluidStreamMesh.visible = false;
+                return;
+            }
+            fluidStreamMesh.visible = true;
+
+            const midPoint = new THREE.Vector3().addVectors(sourcePos, targetPos).multiplyScalar(0.5);
+            fluidStreamMesh.position.copy(midPoint);
+
+            fluidStreamMesh.scale.set(1, distance, 1);
+
+            const direction = new THREE.Vector3().subVectors(targetPos, sourcePos).normalize();
+            const upAxis = new THREE.Vector3(0, 1, 0);
+            fluidStreamMesh.quaternion.setFromUnitVectors(upAxis, direction);
+        }
+
+        // --- PAUSE MENU MODAL INTERACTIONS ---
+        function toggleGamePause(forceState) {
+            isGamePausedState = (forceState !== undefined) ? forceState : !isGamePausedState;
+            
+            const overlay = document.getElementById('pause-overlay');
+            if (isGamePausedState) {
+                overlay.style.display = 'flex';
+                // Flush moving key bindings instantly
+                keys.w = keys.a = keys.s = keys.d = keys.Space = false;
+            } else {
+                overlay.style.display = 'none';
+            }
+        }
+
+        function triggerPauseMenuInfiniteWet() {
+            toggleGamePause(false);
+            player.bladder = 100;
+            player.infiniteWetMode = true;
+            document.getElementById('wetting-indicator').style.display = 'block';
+            createFluidStreamMesh();
+        }
+
+        function triggerPauseMenuClearFluids() {
+            toggleGamePause(false);
+            
+            // Loop through map storage array keys and erase block matching fluid code types (ID 8)
+            for (let [coordKey, columnBlocks] of worldMap.entries()) {
+                const filtered = columnBlocks.filter(b => b.typeId !== 8);
+                if (filtered.length !== columnBlocks.length) {
+                    worldMap.set(coordKey, filtered);
+                    
+                    // Parse global chunk bounds to immediately schedule terrain mesh rewrites
+                    const parsedArray = coordKey.split(',');
+                    const gx = parseInt(parsedArray[0]);
+                    const gz = parseInt(parsedArray[1]);
+                    const cx = Math.floor(gx / CHUNK_SIZE);
+                    const cz = Math.floor(gz / CHUNK_SIZE);
+                    
+                    const chunkKey = `${cx},${cz}`;
+                    if (activeChunks.has(chunkKey)) {
+                        const oldGroup = activeChunks.get(chunkKey);
+                        scene.remove(oldGroup);
+                        oldGroup.children.forEach(m => { if (m.dispose) m.dispose(); });
+                        generateChunkGeometry(cx, cz);
+                    }
+                }
+            }
+        }
+
+        // --- PROCEDURAL GROUND VOXEL ACCUMULATION ---
+        function executeGroundFluidAccumulationLogic(bx, bz) {
+            let targetY = 15;
+            while (targetY >= 0) {
+                let existingBlockId = getBlockTypeAtGlobalCoordinates(bx, targetY, bz);
+                if (existingBlockId > 0) {
+                    setBlockAtGlobalCoordinates(bx, targetY + 1, bz, 8);
+                    return;
+                }
+                targetY--;
+            }
+            setBlockAtGlobalCoordinates(bx, 1, bz, 8);
+        }
+
+        function setupInputListeners() {
+            window.addEventListener('keydown', (e) => {
+                // ESC Key always toggles menu independent of loop states
+                if (e.key === 'Escape' || e.key === 'Esc') {
+                    toggleGamePause();
+                    return;
+                }
+
+                if (player.isUsingBathroom || isGamePausedState) return; 
+
+                if (e.key === 'w' || e.key === 'ArrowUp') keys.w = true;
+                if (e.key === 'a' || e.key === 'ArrowLeft') keys.a = true;
+                if (e.key === 's' || e.key === 'ArrowDown') keys.s = true;
+                if (e.key === 'd' || e.key === 'ArrowRight') keys.d = true;
+                if (e.key === ' ') keys.Space = true;
+                if (e.key === 'Shift') {
+                    keys.Shift = true;
+                    document.getElementById('current-action-text').innerText = "PLACE MODE";
+                }
+                if (['1','2','3','4','5','6','7','8','9'].includes(e.key)) {
+                    setActiveSlot(parseInt(e.key) - 1);
+                }
+                if (e.key === 'b' || e.key === 'B') {
+                    executeBathroomMechanic();
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'w' || e.key === 'ArrowUp') keys.w = false;
+                if (e.key === 'a' || e.key === 'ArrowLeft') keys.a = false;
+                if (e.key === 's' || e.key === 'ArrowDown') keys.s = false;
+                if (e.key === 'd' || e.key === 'ArrowRight') keys.d = false;
+                if (e.key === ' ') keys.Space = false;
+                if (e.key === 'Shift') {
+                    keys.Shift = false;
+                    document.getElementById('current-action-text').innerText = "BREAK MODE";
+                }
+            });
+
+            window.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.interactive') || e.target.id === 'ui-layer' || isGamePausedState) return;
+                mouse.isDown = true;
+                mouse.lastX = e.clientX;
+                mouse.lastY = e.clientY;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!mouse.isDown || isGamePausedState) return;
+                let deltaX = e.clientX - mouse.lastX;
+                let deltaY = e.clientY - mouse.lastY;
+                cameraOrbit.theta -= deltaX * 0.007;
+                cameraOrbit.phi += deltaY * 0.007;
+                cameraOrbit.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.05, cameraOrbit.phi));
+                mouse.lastX = e.clientX;
+                mouse.lastY = e.clientY;
+            });
+
+            window.addEventListener('mouseup', (e) => {
+                if (mouse.isDown) {
+                    mouse.isDown = false;
+                    if (!isGamePausedState) performRaycastAction();
+                }
+            });
+
+            const joystickZone = document.getElementById('mobile-joystick');
+            const handle = document.getElementById('joystick-handle');
+            let joystickTouchId = null;
+
+            joystickZone.addEventListener('touchstart', (e) => {
+                if (player.isUsingBathroom || isGamePausedState) return;
+                const t = e.changedTouches[0];
+                joystickTouchId = t.identifier;
+                updateJoystick(t);
+            });
+            joystickZone.addEventListener('touchmove', (e) => {
+                if (joystickTouchId === null || isGamePausedState) return;
+                for (let t of e.touches) {
+                    if (t.identifier === joystickTouchId) updateJoystick(t);
+                }
+            });
+            const resetJoy = () => {
+                joystickTouchId = null;
+                handle.style.transform = `translate(0px, 0px)`;
+                keys.w = keys.a = keys.s = keys.d = false;
+            };
+            joystickZone.addEventListener('touchend', resetJoy);
+            joystickZone.addEventListener('touchcancel', resetJoy);
+
+            function updateJoystick(touch) {
+                const rect = joystickZone.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                const maxDist = rect.width / 2;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                if (dist > maxDist) {
+                    dx = (dx / dist) * maxDist;
+                    dy = (dy / dist) * maxDist;
+                }
+                handle.style.transform = `translate(${dx}px, ${dy}px)`;
+                keys.w = dy < -20;
+                keys.s = dy > 20;
+                keys.a = dx < -20;
+                keys.d = dx > 20;
+            }
+
+            document.getElementById('btn-jump').addEventListener('touchstart', (e) => { e.preventDefault(); if(!isGamePausedState) keys.Space = true; });
+            document.getElementById('btn-jump').addEventListener('touchend', () => keys.Space = false);
+            document.getElementById('btn-mode').addEventListener('click', () => {
+                if (isGamePausedState) return;
+                keys.Shift = !keys.Shift;
+                document.getElementById('current-action-text').innerText = keys.Shift ? "PLACE MODE" : "BREAK MODE";
+            });
+            document.getElementById('btn-bathroom').addEventListener('click', () => {
+                if (!isGamePausedState) executeBathroomMechanic();
+            });
+        }
+
+        // --- RAYCASTING AGAINST STREAMED CHUNKS ---
+        function performRaycastAction() {
+            if (player.isUsingBathroom || isGamePausedState) return;
+            const raycaster = new THREE.Raycaster();
+            const centerVec = new THREE.Vector2(0, 0);
+            raycaster.setFromCamera(centerVec, camera);
+            
+            const interactiveMeshes = [];
+            activeChunks.forEach(chunkGroup => {
+                interactiveMeshes.push(...chunkGroup.children);
+            });
+
+            const intersects = raycaster.intersectObjects(interactiveMeshes);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                if (hit.distance > 8.0) return;
+
+                let target = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(-0.4));
+                const bx = Math.floor(target.x);
+                const by = Math.floor(target.y);
+                const bz = Math.floor(target.z);
+
+                const currentHeldBlock = BLOCK_TYPES[activeBlockIndex];
+
+                if (currentHeldBlock.id === 9) {
+                    const targetBlockId = getBlockTypeAtGlobalCoordinates(bx, by, bz);
+                    if (targetBlockId === 8) { 
+                        for (let kx = -1; kx <= 1; kx++) {
+                            for (let kz = -1; kz <= 1; kz++) {
+                                if (getBlockTypeAtGlobalCoordinates(bx + kx, by, bz + kz) === 8) {
+                                    setBlockAtGlobalCoordinates(bx + kx, by, bz + kz, null);
+                                }
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (!keys.Shift) {
+                    setBlockAtGlobalCoordinates(bx, by, bz, null);
+                } else {
+                    let place = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(0.4));
+                    const placeX = Math.floor(place.x);
+                    const placeY = Math.floor(place.y);
+                    const placeZ = Math.floor(place.z);
+
+                    const pMinX = player.position.x - player.width/2;
+                    const pMaxX = player.position.x + player.width/2;
+                    const pMinZ = player.position.z - player.width/2;
+                    const pMaxZ = player.position.z + player.width/2;
+                    const pMinY = player.position.y - 0.9; 
+                    const pMaxY = player.position.y + player.height - 0.9;
+
+                    const isClippingPlayer = (
+                        placeX + 1 > pMinX && placeX < pMaxX &&
+                        placeZ + 1 > pMinZ && placeZ < pMaxZ &&
+                        placeY + 1 > pMinY && placeY < pMaxY
+                    );
+
+                    if (!isClippingPlayer) {
+                        setBlockAtGlobalCoordinates(placeX, placeY, placeZ, currentHeldBlock.id);
+                    }
+                }
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function resolveCollisions(deltaTime) {
+            if (player.isSwimming) {
+                player.velocity.y += GRAVITY * 0.15 * deltaTime; 
+                player.velocity.y = Math.max(-2.5, player.velocity.y); 
+            } else {
+                player.velocity.y += GRAVITY * deltaTime;
+            }
+            
+            player.position.x += player.velocity.x * deltaTime;
+            handleAABBCollision('x');
+
+            player.position.z += player.velocity.z * deltaTime;
+            handleAABBCollision('z');
+
+            player.position.y += player.velocity.y * deltaTime;
+            player.isGrounded = false;
+            handleAABBCollision('y');
+        }
+
+        function handleAABBCollision(axis) {
+            const hw = player.width / 2;
+            const minX = player.position.x - hw;
+            const maxX = player.position.x + hw;
+            const minZ = player.position.z - hw;
+            const maxZ = player.position.z + hw;
+            const minY = player.position.y - 0.9; 
+            const maxY = player.position.y + player.height - 0.9;
+
+            const startX = Math.floor(minX);
+            const endX = Math.floor(maxX);
+            const startY = Math.floor(minY);
+            const endY = Math.floor(maxY);
+            const startZ = Math.floor(minZ);
+            const endZ = Math.floor(maxZ);
+
+            let swimmingCheck = false;
+
+            for (let x = startX; x <= endX; x++) {
+                for (let y = startY; y <= endY; y++) {
+                    for (let z = startZ; z <= endZ; z++) {
+                        const typeId = getBlockTypeAtGlobalCoordinates(x, y, z);
+                        if (typeId > 0) {
+                            if (typeId === 8) {
+                                swimmingCheck = true;
+                                continue; 
+                            }
+
+                            if (axis === 'x') {
+                                if (player.velocity.x > 0) player.position.x = x - hw;
+                                else if (player.velocity.x < 0) player.position.x = x + 1 + hw;
+                                player.velocity.x = 0;
+                            }
+                            if (axis === 'z') {
+                                if (player.velocity.z > 0) player.position.z = z - hw;
+                                else if (player.velocity.z < 0) player.position.z = z + 1 + hw;
+                                player.velocity.z = 0;
+                            }
+                            if (axis === 'y') {
+                                if (player.velocity.y > 0) {
+                                    player.position.y = y - (player.height - 0.9);
+                                    player.velocity.y = 0;
+                                } else if (player.velocity.y < 0) {
+                                    player.position.y = y + 1 + 0.9;
+                                    player.velocity.y = 0;
+                                    player.isGrounded = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            player.isSwimming = swimmingCheck;
+        }
+
+        // --- ANIME EXAGGERATED PHYSICS SYSTEM ---
+        function updateAnimePhysics(deltaTime, movementVector, speed) {
+            const horizontalVelMagnitude = Math.sqrt(player.velocity.x * player.velocity.x + player.velocity.z * player.velocity.z);
+            const t = clock.getElapsedTime();
+
+            physicsJoints.forEach(joint => {
+                let targetX = joint.rest.x;
+                let targetZ = joint.rest.z;
+
+                if (joint.type === 'hair') {
+                    targetZ += (horizontalVelMagnitude * 0.06); 
+                    targetX += Math.sin(t * 4.5) * 0.02;
+                    targetZ -= (player.velocity.y * 0.04);
+                    
+                    let forceX = (targetX - joint.currentRot.x) * joint.stiffness;
+                    let forceZ = (targetZ - joint.currentRot.z) * joint.stiffness;
+                    joint.vel.x += forceX; joint.vel.z += forceZ;
+                    joint.vel.multiplyScalar(joint.damping);
+                    joint.currentRot.add(joint.vel);
+                    joint.obj.rotation.x = joint.currentRot.x;
+                    joint.obj.rotation.z = joint.currentRot.z;
+
+                } else if (joint.type === 'skirt') {
+                    targetZ += (horizontalVelMagnitude * 0.03);
+                    targetX += Math.cos(t * 5.0) * 0.01;
+                    
+                    if (player.isUsingBathroom || player.infiniteWetMode) {
+                        targetX += 0.15;
+                    }
+
+                    let forceX = (targetX - joint.currentRot.x) * joint.stiffness;
+                    let forceZ = (targetZ - joint.currentRot.z) * joint.stiffness;
+                    joint.vel.x += forceX; joint.vel.z += forceZ;
+                    joint.vel.multiplyScalar(joint.damping);
+                    joint.currentRot.add(joint.vel);
+                    joint.obj.rotation.x = joint.currentRot.x;
+                    joint.obj.rotation.z = joint.currentRot.z;
+
+                } else if (joint.type === 'breast') {
+                    let targetPosY = joint.restPos.y;
+                    let targetPosZ = joint.restPos.z;
+                    let targetPosX = joint.restPos.x;
+
+                    if (horizontalVelMagnitude > 0.1) {
+                        targetPosY += Math.sin(t * 16.0) * 0.05; 
+                        targetPosZ += Math.cos(t * 16.0) * 0.03; 
+                        targetPosX += Math.sin(t * 8.0) * 0.015 * joint.side; 
+                    } else if (player.isUsingBathroom || player.infiniteWetMode) {
+                        targetPosY += Math.sin(t * 22.0) * 0.012;
+                        targetPosZ += Math.cos(t * 22.0) * 0.006;
+                    } else {
+                        targetPosY += Math.sin(t * 3.0) * 0.008;
+                    }
+
+                    targetPosY -= player.velocity.y * 0.018; 
+                    if (!player.isGrounded) {
+                        targetPosZ -= player.velocity.y * 0.01;
+                    }
+
+                    let fX = (targetPosX - joint.currentPos.x) * joint.stiffness * 2.5;
+                    let fY = (targetPosY - joint.currentPos.y) * joint.stiffness * 2.5;
+                    let fZ = (targetPosZ - joint.currentPos.z) * joint.stiffness * 2.5;
+
+                    joint.velPos.x += fX; joint.velPos.y += fY; joint.velPos.z += fZ;
+                    joint.velPos.multiplyScalar(joint.damping); 
+                    joint.currentPos.add(joint.velPos);
+                    joint.obj.position.copy(joint.currentPos);
+
+                    let targetRotX = joint.rest.x;
+                    if (horizontalVelMagnitude > 0.1) {
+                        targetRotX += Math.sin(t * 16.0) * 0.35; 
+                    } else if (player.isUsingBathroom || player.infiniteWetMode) {
+                        targetRotX += Math.sin(t * 22.0) * 0.08;
+                    }
+                    targetRotX -= player.velocity.y * 0.12;
+
+                    let fRotX = (targetRotX - joint.currentRot.x) * joint.stiffness;
+                    joint.vel.x += fRotX;
+                    joint.vel.x *= joint.damping;
+                    joint.currentRot.x += joint.vel.x;
+                    joint.currentRot.x = Math.max(-joint.maxAngle, Math.min(joint.maxAngle, joint.currentRot.x));
+                    
+                    joint.obj.rotation.x = joint.currentRot.x;
+                }
+            });
+        }
+
+        function handleProceduralMeshAnimations(time, speed) {
+            if (player.isSwimming) {
+                const swimWave = Math.sin(time * 6.0) * 0.5;
+                player.leftLeg.rotation.x = swimWave;
+                player.rightLeg.rotation.x = -swimWave;
+                player.leftArm.rotation.x = Math.PI / 2.2 + swimWave * 0.6;
+                player.rightArm.rotation.x = Math.PI / 2.2 - swimWave * 0.6;
+                player.leftArm.rotation.z = 0.4 + Math.cos(time * 6.0) * 0.2;
+                player.rightArm.rotation.z = -0.4 - Math.cos(time * 6.0) * 0.2;
+                characterGroup.children[0].position.y = 0.22 + Math.sin(time * 6.0) * 0.04;
+                return;
+            }
+
+            if (player.isUsingBathroom || player.infiniteWetMode) {
+                player.leftLeg.rotation.x = 0.05;
+                player.rightLeg.rotation.x = 0.05;
+                player.leftArm.rotation.x = -0.5;
+                player.rightArm.rotation.x = -0.5;
+                player.leftArm.rotation.z = 0.2;
+                player.rightArm.rotation.z = -0.2;
+                characterGroup.children[0].position.y = 0.25; 
+                return;
+            }
+
+            if (player.isGrounded && speed > 0.1) {
+                const wave = Math.sin(time * 12.0) * 0.65;
+                player.leftLeg.rotation.x = wave;
+                player.rightLeg.rotation.x = -wave;
+                player.leftArm.rotation.x = -wave * 0.8;
+                player.rightArm.rotation.x = wave * 0.8;
+                
+                characterGroup.children[0].position.y = 0.275 + Math.abs(Math.sin(time * 12.0)) * 0.05;
+            } else if (!player.isGrounded) {
+                player.leftLeg.rotation.x = 0.2;
+                player.rightLeg.rotation.x = -0.3;
+                player.leftArm.rotation.z = 0.3;
+                player.rightArm.rotation.z = -0.3;
+            } else {
+                player.leftLeg.rotation.x = THREE.MathUtils.lerp(player.leftLeg.rotation.x, 0, 0.1);
+                player.rightLeg.rotation.x = THREE.MathUtils.lerp(player.rightLeg.rotation.x, 0, 0.1);
+                player.leftArm.rotation.x = THREE.MathUtils.lerp(player.leftArm.rotation.x, 0, 0.1);
+                player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, 0.1);
+                player.leftArm.rotation.z = THREE.MathUtils.lerp(player.leftArm.rotation.z, 0.05, 0.1);
+                player.rightArm.rotation.z = THREE.MathUtils.lerp(player.rightArm.rotation.z, -0.05, 0.1);
+
+                characterGroup.children[0].position.y = 0.275 + Math.sin(time * 2.0) * 0.015; 
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // If game is paused, bypass physics engine steps and continue frame rendering only
+            if (isGamePausedState) {
+                renderer.render(scene, camera);
+                return;
+            }
+
+            const deltaTime = Math.min(clock.getDelta(), 0.1); 
+            const time = clock.getElapsedTime();
+
+            if (player.isUsingBathroom) {
+                player.bathroomTimer -= deltaTime;
+                player.bladder = Math.max(0, (player.bathroomTimer / player.bathroomDuration) * player.startingBladder);
+
+                if (player.bathroomTimer > 0.1 && placementBucketMesh) {
+                    let fluidSurface = placementBucketMesh.getObjectByName("fluidSurface");
+                    if (fluidSurface && placementBucketMesh.fluidLevel < 0.35) {
+                        placementBucketMesh.fluidLevel += 1.4 * deltaTime * (player.startingBladder / 100) * 0.05; 
+                        placementBucketMesh.fluidLevel = Math.min(0.35, placementBucketMesh.fluidLevel);
+                        fluidSurface.scale.y = placementBucketMesh.fluidLevel;
+                        
+                        const h = 0.4;
+                        const thickness = 0.04;
+                        fluidSurface.position.y = (-h/2 + thickness) + placementBucketMesh.fluidLevel / 2;
+                    }
+                }
+
+                updateFluidStreamMeshLogic();
+
+                if (player.bathroomTimer <= 0) {
+                    player.isUsingBathroom = false;
+                    player.bladder = 0; 
+                    player.infiniteWetMode = false; 
+                    document.getElementById('wetting-indicator').style.display = 'none';
+                    
+                    if (fluidStreamMesh) {
+                        scene.remove(fluidStreamMesh);
+                        fluidStreamMesh = null;
+                    }
+                }
+            } else {
+                if (!player.infiniteWetMode) {
+                    player.bladder = Math.min(100, player.bladder + deltaTime * 1.6667);
+                    if (player.bladder >= 100) {
+                        player.infiniteWetMode = true;
+                        document.getElementById('wetting-indicator').style.display = 'block';
+                        createFluidStreamMesh();
+                    }
+                } else {
+                    updateFluidStreamMeshLogic();
+
+                    player.fluidAccumulationTimer += deltaTime;
+                    if (player.fluidAccumulationTimer >= 0.5) { 
+                        player.fluidAccumulationTimer = 0;
+                        
+                        const fluidDropX = Math.floor(player.position.x + Math.sin(player.rotationY) * 0.45);
+                        const fluidDropZ = Math.floor(player.position.z + Math.cos(player.rotationY) * 0.45);
+
+                        const holdingSponge = (BLOCK_TYPES[activeBlockIndex].id === 9);
+                        if (!holdingSponge) {
+                            executeGroundFluidAccumulationLogic(fluidDropX, fluidDropZ);
+                        }
+                    }
+                }
+            }
+
+            if (player.isUsingBathroom || player.infiniteWetMode) {
+                player.skirt.position.y = THREE.MathUtils.lerp(player.skirt.position.y, 0.22, 10 * deltaTime);
+                player.skirt.scale.y = THREE.MathUtils.lerp(player.skirt.scale.y, 0.4, 10 * deltaTime);
+            } else {
+                player.skirt.position.y = THREE.MathUtils.lerp(player.skirt.position.y, 0.05, 10 * deltaTime);
+                player.skirt.scale.y = THREE.MathUtils.lerp(player.skirt.scale.y, 1.0, 10 * deltaTime);
+            }
+
+            if (player.spongeMesh && player.spongeMesh.visible) {
+                let targetSpongeScale = (mouse.isDown || player.infiniteWetMode) ? 1.6 : 1.0;
+                player.spongeMesh.scale.setScalar(THREE.MathUtils.lerp(player.spongeMesh.scale.x, targetSpongeScale, 6 * deltaTime));
+                
+                if (mouse.isDown || player.infiniteWetMode) {
+                    const px = Math.floor(player.position.x);
+                    const py = Math.floor(player.position.y - 1.0);
+                    const pz = Math.floor(player.position.z);
+                    for (let xOffset = -1; xOffset <= 1; xOffset++) {
+                        for (let zOffset = -1; zOffset <= 1; zOffset++) {
+                            if (getBlockTypeAtGlobalCoordinates(px + xOffset, py, pz + zOffset) === 8) {
+                                setBlockAtGlobalCoordinates(px + xOffset, py, pz + zOffset, null);
+                            }
+                        }
+                    }
+                }
+            }
+
+            document.getElementById('bladder-text').innerText = Math.floor(player.bladder);
+            document.getElementById('bladder-bar').style.width = player.bladder + '%';
+
+            const CURRENT_SPEED = player.isSwimming ? MOVE_SPEED * 0.6 : MOVE_SPEED;
+
+            const forward = new THREE.Vector3();
+            forward.set(player.position.x - camera.position.x, 0, player.position.z - camera.position.z).normalize();
+
+            const right = new THREE.Vector3();
+            right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+            
+            let finalDirection = new THREE.Vector3();
+            if (keys.w) finalDirection.add(forward);
+            if (keys.s) finalDirection.add(forward.clone().negate());
+            if (keys.a) finalDirection.add(right.clone().negate());
+            if (keys.d) finalDirection.add(right);
+
+            if (finalDirection.lengthSq() > 0) finalDirection.normalize();
+
+            player.velocity.x = finalDirection.x * CURRENT_SPEED;
+            player.velocity.z = finalDirection.z * CURRENT_SPEED;
+
+            if (keys.Space) {
+                if (player.isSwimming) {
+                    player.velocity.y = 3.2; 
+                } else if (player.isGrounded) {
+                    player.velocity.y = JUMP_FORCE;
+                    player.isGrounded = false;
+                }
+            }
+
+            resolveCollisions(deltaTime);
+            characterGroup.position.copy(player.position);
+            
+            updateWorldStreaming();
+
+            let horizontalSpeed = Math.sqrt(player.velocity.x * player.velocity.x + player.velocity.z * player.velocity.z);
+            if (horizontalSpeed > 0.5) {
+                let targetAngle = Math.atan2(player.velocity.x, player.velocity.z);
+                let diff = targetAngle - player.rotationY;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                player.rotationY += diff * 0.18;
+                characterGroup.rotation.y = player.rotationY;
+            }
+
+            updateAnimePhysics(deltaTime, finalDirection, horizontalSpeed);
+            handleProceduralMeshAnimations(time, horizontalSpeed);
+
+            let targetRadius = player.isUsingBathroom ? 1.8 : 4.5;
+            cameraOrbit.radius = THREE.MathUtils.lerp(cameraOrbit.radius, targetRadius, 4.0 * deltaTime);
+
+            const targetCamPosition = new THREE.Vector3();
+            targetCamPosition.x = player.position.x + cameraOrbit.radius * Math.sin(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            targetCamPosition.y = player.position.y + cameraOrbit.radius * Math.sin(cameraOrbit.phi) + 0.4;
+            targetCamPosition.z = player.position.z + cameraOrbit.radius * Math.cos(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+
+            camera.position.copy(targetCamPosition);
+            const lookAtTarget = player.position.clone().add(new THREE.Vector3(0, 0.4, 0));
+            camera.lookAt(lookAtTarget);
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = () => {
+            init();
+        };
+    </script>
+</body>
+</html>
